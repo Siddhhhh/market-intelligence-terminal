@@ -1,0 +1,35 @@
+# ============================================================
+# Market Intelligence Terminal — Git Ignore
+# ============================================================
+
+# Environment (NEVER commit .env — secrets live here)
+# .env.example IS committed — it shows required variables
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data artifacts
+*.csv
+*.parquet
+data/raw/
+
+# Node / Frontend
+node_modules/
+.next/
+dist/
+
+# Python
+*.egg-info/
+build/

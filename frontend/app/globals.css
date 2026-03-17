@@ -1,0 +1,103 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2e2720 #0d0b08;
+}
+
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #0d0b08;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #2e2720;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #4a3f32;
+}
+
+body {
+  background: #0d0b08;
+  color: #e8dcc8;
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+@layer components {
+  .panel {
+    @apply bg-terminal-panel border border-terminal-border rounded-lg;
+  }
+
+  .panel-header {
+    @apply px-4 py-3 border-b border-terminal-border flex items-center justify-between;
+  }
+
+  .panel-title {
+    @apply text-xs font-semibold text-terminal-muted uppercase tracking-widest;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-terminal-accent text-terminal-bg text-sm font-semibold rounded-md
+           hover:brightness-110 transition-all duration-150;
+  }
+
+  .btn-ghost {
+    @apply px-3 py-1.5 text-terminal-dim text-sm font-medium rounded-md
+           hover:bg-terminal-surface hover:text-terminal-text transition-colors duration-150;
+  }
+
+  .input-field {
+    @apply w-full bg-terminal-surface border border-terminal-border rounded-md
+           px-3 py-2 text-sm text-terminal-text placeholder-terminal-muted
+           focus:outline-none focus:border-terminal-accent focus:ring-1 focus:ring-terminal-accent/40;
+  }
+
+  .ticker-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-semibold;
+  }
+
+  .gain {
+    @apply text-terminal-green;
+  }
+
+  .loss {
+    @apply text-terminal-red;
+  }
+
+  .shimmer {
+    @apply animate-pulse bg-terminal-surface rounded;
+  }
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: "▋";
+  animation: blink 1s infinite;
+  color: #d4a843;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(46, 39, 32, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 39, 32, 0.12) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+::selection {
+  background: rgba(212, 168, 67, 0.3);
+  color: #e8dcc8;
+}
