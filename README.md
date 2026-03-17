@@ -1,8 +1,8 @@
 # Market Intelligence Terminal
 
-A production-grade financial intelligence platform that combines 35+ years of market data with AI-powered analysis. Built with PostgreSQL, TimescaleDB, FastAPI, Next.js, and local LLMs via Ollama.
+A production-grade financial intelligence platform that combines 35+ years of market data with AI-powered analysis, a deterministic movement attribution engine, and a portfolio intelligence system. Built with PostgreSQL, TimescaleDB, FastAPI, Next.js, and local LLMs via Ollama.
 
-This is not a tutorial project. It ingests 3.7 million rows of real stock data, detects market anomalies automatically, and answers financial questions using a two-model AI architecture grounded in database evidence.
+This is not a tutorial project. It ingests 3.7 million rows of real stock data, precomputes 3.5 million technical indicators, detects market anomalies automatically, explains why stocks move using scored signals, and provides investment intelligence with portfolio tracking.
 
 ![Dashboard Preview](docs/dashboard.png)
 
@@ -10,9 +10,13 @@ This is not a tutorial project. It ingests 3.7 million rows of real stock data, 
 
 ## What It Does
 
-Ask the AI analyst: *"Why did NVIDIA rise in 2023?"*
+**Ask the AI analyst:** *"Why did NVIDIA rise in 2023?"*
 
-The system queries the database, finds NVDA's +246% return, pulls semiconductor sector performance data, retrieves relevant market events, checks macroeconomic conditions (Fed rate at 5.33%, VIX at 12.45), and generates a data-grounded explanation. No hallucination — every claim is backed by real numbers from the database.
+The system queries the database, finds NVDA's +246% return, pulls sector performance data, retrieves relevant market events, checks macroeconomic conditions, and generates a data-grounded explanation. No hallucination — every claim is backed by real numbers.
+
+**Check any stock's intelligence:** Open the Company Intelligence Terminal, type AAPL, and see fundamentals, technical indicators, institutional holders, movement drivers, confidence scores, and support/resistance zones — all computed from real data.
+
+**Build and analyze a portfolio:** Add holdings, track P&L in real-time, get diversification scores, sector breakdown, risk assessment, and actionable warnings like "Overexposed to Technology (68%)."
 
 ---
 
@@ -23,6 +27,47 @@ The system queries the database, finds NVDA's +246% return, pulls semiconductor 
 - 36 years of continuous trading data with computed daily percent changes
 - Full crypto coverage: Bitcoin (2014+), Ethereum (2017+), Solana (2020+)
 - 6 macroeconomic indicators from FRED: Fed Funds Rate, CPI, GDP, Unemployment, 10Y Treasury, VIX
+
+**Movement Attribution Engine**
+- Deterministic pipeline: data → signal extraction → scoring → driver selection → explanation
+- 5 signal modules: price, volume, sector, macro, event
+- Each signal scored with factor, impact, strength (0-1), and confidence (0-1)
+- Driver selection with category diversity (max 2 per category, max 4 total)
+- Confidence system: data quality × signal agreement × weighted average
+- LLM formats the output — it does NOT reason or invent
+- 3.5M precomputed technical indicators (MA20/50/200, RSI, MACD, volatility)
+
+![Movement Attribution](docs/movement.png)
+
+**Company Intelligence Terminal**
+- Full company profile: financials, market cap, P/E, EPS, revenue, margins
+- Technical indicators: moving averages, RSI, MACD, trend direction
+- Institutional holders from yfinance (top 10)
+- Company relationships graph: suppliers, partners, competitors
+- Support/resistance zones from 60-day price cluster analysis
+- Buy/sell zones labeled as statistical estimates (not predictions)
+
+![Company Intelligence](docs/intelligence.png)
+
+**Investment Scoring System**
+- 0-100 investment score per stock based on 5 weighted factors
+- Factors: trend (25%), fundamentals (20%), momentum (20%), risk (20%), sector (15%)
+- Rating: Strong Buy (80+), Buy (65-79), Hold (40-64), Avoid (below 40)
+- Risk profiling: conservative, moderate, aggressive
+- Suitability matching: "Suitable for your moderate profile" or "May not suit"
+
+![Investment Score](docs/score.png)
+
+**Portfolio Intelligence**
+- Track holdings with buy price, quantity, and real-time P&L
+- Supports stocks and crypto (BTC, ETH, SOL)
+- Sector allocation breakdown with visual bars
+- Diversification score (0-100) based on holdings count, sector spread, concentration
+- Risk assessment: low, moderate, high
+- Actionable insights: overexposure warnings, missing sector suggestions, loss alerts
+- Persistent storage in PostgreSQL (survives restarts)
+
+![Portfolio Tracker](docs/portfolio.png)
 
 **Automated Event Detection**
 - 70,000+ detected market events across 36 years
@@ -41,24 +86,20 @@ The system queries the database, finds NVDA's +246% return, pulls semiconductor 
 - Compare any stock, sector, or crypto across two time periods
 - AAPL 2008 (-55.71%) vs 2023 (+54.80%) with volatility, best/worst days, volume
 - Sector comparison: pre-COVID vs post-COVID with direction indicators
-- Full diff metrics: return difference, volatility difference, relative ranking
 
 **Sector Performance Heatmap**
 - 11 GICS sectors with precomputed daily performance (100K+ rows)
 - Sub-5ms API response using precomputed aggregation table
-- Top gainer and loser per sector per day
 - Historical heatmap for any date from 1990 to present
 
 **Top Movers Engine**
 - Daily, weekly, and monthly gainers/losers
 - SQL window functions for period return calculation
 - Crypto movers with the same period support
-- Historical movers for any date
 
 **Daily Automation**
 - APScheduler runs at 4:30 PM ET (after US market close)
-- Incremental update: fetches last 5 days only (3-4 minutes vs 60 minutes for full)
-- Automatic event detection on new data
+- Incremental update: 3-4 minutes vs 60 minutes for full
 - Idempotent: safe to re-run without creating duplicates
 
 ---
@@ -66,125 +107,111 @@ The system queries the database, finds NVDA's +246% return, pulls semiconductor 
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        DATA SOURCES                             │
-│                                                                 │
-│   yfinance ──────┐                                              │
-│   (503 stocks)   │                                              │
-│                  ▼                                               │
-│   yfinance ──► PYTHON DATA PIPELINE                             │
-│   (BTC/ETH/SOL)  │  download → clean → validate → compute %    │
-│                  │  → detect events → store                     │
-│   FRED API ──────┘                                              │
-│   (6 indicators)     │                                          │
-│                      ▼                                          │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │          POSTGRESQL 16 + TIMESCALEDB                 │      │
-│   │                                                      │      │
-│   │  stocks ─────────── 3.7M rows [HYPERTABLE]           │      │
-│   │  crypto_prices ──── 9.4K rows [HYPERTABLE]           │      │
-│   │  companies ──────── 503 S&P 500 companies            │      │
-│   │  market_events ──── 70K+ detected events             │      │
-│   │  macro_events ───── 32K+ economic data points        │      │
-│   │  sector_performance  100K+ precomputed rows          │      │
-│   │  sectors ────────── 11 GICS sectors                  │      │
-│   │  market_regimes ─── regime detection (extensible)    │      │
-│   └──────────────┬───────────────────────────────────────┘      │
-│                  │                                               │
-│                  ▼                                               │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │              FASTAPI REST API                        │      │
-│   │                                                      │      │
-│   │  /api/stocks      /api/crypto     /api/events        │      │
-│   │  /api/sectors     /api/movers     /api/heatmap       │      │
-│   │  /api/compare     /api/market     /api/ai/chat       │      │
-│   └──────────┬──────────────────┬────────────────────────┘      │
-│              │                  │                                │
-│              │                  ▼                                │
-│              │   ┌──────────────────────────────────┐           │
-│              │   │     AI ENGINE (Ollama Local)     │           │
-│              │   │                                  │           │
-│              │   │  User Query                      │           │
-│              │   │    ▼                              │           │
-│              │   │  Mistral ─► Query Router          │           │
-│              │   │    ▼                              │           │
-│              │   │  Evidence Builder (DB queries)    │           │
-│              │   │    ▼                              │           │
-│              │   │  Llama3 ─► Market Analyst         │           │
-│              │   │    ▼                              │           │
-│              │   │  Data-Grounded Response           │           │
-│              │   └──────────────────────────────────┘           │
-│              │                                                   │
-│              ▼                                                   │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │           NEXT.JS FRONTEND                           │      │
-│   │                                                      │      │
-│   │  ┌─────────┐  ┌──────────────┐  ┌────────────┐      │      │
-│   │  │  LEFT   │  │   CENTER     │  │   RIGHT    │      │      │
-│   │  │         │  │              │  │            │      │      │
-│   │  │ Company │  │ Candlestick  │  │ AI Chat    │      │      │
-│   │  │ Search  │  │ Chart        │  │ Panel      │      │      │
-│   │  │         │  │              │  │            │      │      │
-│   │  │ Sector  │  │ Stock Detail │  │ Evidence   │      │      │
-│   │  │ Filter  │  │ Metrics      │  │ Sources    │      │      │
-│   │  │         │  │              │  │            │      │      │
-│   │  │         │  │ Heatmap      │  │ Confidence │      │      │
-│   │  │         │  │ Top Movers   │  │ Score      │      │      │
-│   │  │         │  │ Suggestions  │  │            │      │      │
-│   │  └─────────┘  └──────────────┘  └────────────┘      │      │
-│   └──────────────────────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          DATA SOURCES                                │
+│   yfinance (503 stocks) ──┐                                          │
+│   yfinance (BTC/ETH/SOL) ─┤──► DATA PIPELINE ──► PostgreSQL+Timescale│
+│   FRED API (6 indicators) ─┘   │                                     │
+│                                 ├── stocks (3.7M rows)               │
+│                                 ├── daily_indicators (3.5M rows)     │
+│                                 ├── sector_performance (100K rows)   │
+│                                 ├── market_events (70K rows)         │
+│                                 ├── company_cache (fundamentals)     │
+│                                 ├── portfolio_holdings (user data)   │
+│                                 └── company_relationships (graph)    │
+│                                                                      │
+│   ┌──────────────────────────────────────────────────────────────┐   │
+│   │                     FASTAPI REST API                         │   │
+│   │                                                              │   │
+│   │  /api/stocks    /api/crypto    /api/events    /api/heatmap   │   │
+│   │  /api/sectors   /api/movers    /api/compare   /api/market    │   │
+│   │  /api/ai/chat   /api/company/*/intelligence                  │   │
+│   │  /api/company/*/movement-explanation                         │   │
+│   │  /api/investments/score/*    /api/portfolio/*                 │   │
+│   └──────────┬───────────────────────┬───────────────────────────┘   │
+│              │                       │                               │
+│              ▼                       ▼                               │
+│   ┌──────────────────┐   ┌───────────────────────────────┐          │
+│   │  AI ENGINE       │   │  MOVEMENT ATTRIBUTION ENGINE  │          │
+│   │                  │   │                               │          │
+│   │  Mistral→Router  │   │  Signals → Score → Select    │          │
+│   │  Evidence Builder│   │  → Structured Explanation     │          │
+│   │  Llama3→Analyst  │   │  → Presentation Mapper        │          │
+│   └──────────────────┘   └───────────────────────────────┘          │
+│                                                                      │
+│   ┌──────────────────────────────────────────────────────────────┐   │
+│   │                  NEXT.JS FRONTEND                            │   │
+│   │                                                              │   │
+│   │  /dashboard  — 3-panel trading terminal                      │   │
+│   │  /crypto     — crypto markets + charts                       │   │
+│   │  /company    — Company Intelligence Terminal                 │   │
+│   │  /investments — Portfolio Tracker + Investment Scorer         │   │
+│   └──────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## AI System Design
+## Movement Attribution Engine
 
-The AI uses a three-stage pipeline that prevents hallucination by grounding every response in database evidence.
+The core differentiator. Instead of asking an LLM "why did this stock move?", we built a deterministic pipeline that extracts, scores, and ranks signals from real data.
 
-### Stage 1: Query Router (Mistral)
+### Pipeline
 
-Classifies incoming questions in under 1 second:
-
-| Category | Example | Action |
-|---|---|---|
-| `finance_knowledge` | "What is inflation?" | Direct LLM response (no DB needed) |
-| `market_data` | "Why did Tesla drop in 2022?" | Build evidence → analyze |
-| `historical_analysis` | "Biggest crashes since 2000" | Build evidence → analyze |
-| `off_topic` | "What's the weather?" | Polite redirect |
-
-### Stage 2: Evidence Builder
-
-Queries the database for structured financial signals before the LLM sees anything:
-
-```json
-{
-  "company_data": {
-    "NVDA": {
-      "period_return": 246.10,
-      "price_range": "$14.25 - $50.37",
-      "biggest_moves": [
-        {"date": "2023-05-25", "pct_change": 24.37},
-        {"date": "2023-02-23", "pct_change": 14.02}
-      ]
-    }
-  },
-  "sector_performance": {"Technology": {"avg_daily_change": 0.5338}},
-  "market_events": [...],
-  "macro_events": [
-    {"indicator": "fed_funds_rate", "value": 5.33},
-    {"indicator": "vix", "value": 12.45}
-  ],
-  "confidence_score": 0.8,
-  "data_points": 290
-}
+```
+Price Data ─────┐
+Volume Data ────┤
+Sector Data ────┤──► Time Alignment ──► Signal Extraction ──► Scoring
+Macro Data ─────┤                       (5 modules)           │
+Event Data ─────┘                                             ▼
+                                                    Driver Selection
+                                                    (top 4, diverse)
+                                                          │
+                                                          ▼
+                                                  Structured Output
+                                                  {drivers, confidence,
+                                                   context, zones}
+                                                          │
+                                                          ▼
+                                                  Presentation Mapper
+                                                  (analyst-style language)
 ```
 
-### Stage 3: Market Analyst (Llama3)
+### Signal Modules
 
-Receives the structured evidence and generates an explanation. The system prompt instructs the model to reference specific numbers and dates from the evidence, never invent data, and acknowledge when evidence is insufficient.
+| Module | What it detects | Examples |
+|---|---|---|
+| `price_signals` | Trend, RSI, MACD, MA alignment | "Bearish trend", "RSI overbought" |
+| `volume_signals` | Spikes, dry-ups, divergence | "Heavy selling volume", "Rally lacks conviction" |
+| `sector_signals` | Relative strength, sector momentum | "Outperforming sector", "Whole sector declining" |
+| `macro_signals` | Rate environment, VIX, CPI shifts | "High rates weighing on stocks" |
+| `event_signals` | Detected crashes, spikes, sector moves | "Market-wide sell-off detected" |
 
-**Why this matters:** Most AI finance tools generate responses from training data alone. This system queries 3.7M real data points and passes structured evidence to the LLM. The confidence score tells the user how much evidence was available.
+### Confidence System
+
+```
+overall_confidence = weighted_avg(strength × confidence) × signal_agreement × data_quality
+```
+
+- **Data quality**: Is macro data fresh? Are events available? Missing fields?
+- **Signal agreement**: Do most signals point the same direction?
+- **Final confidence**: Displayed as High/Moderate/Low with visual meter
+
+---
+
+## Investment Scoring
+
+Each stock is rated 0-100 based on five weighted factors:
+
+| Factor | Weight | What it measures |
+|---|---|---|
+| Trend | 25% | Price position vs moving averages, trend direction |
+| Fundamentals | 20% | P/E ratio, revenue growth, profit margins |
+| Momentum | 20% | RSI conditions, MACD direction, volume interest |
+| Risk | 20% | 20-day volatility (lower = higher score) |
+| Sector | 15% | Sector performance trend |
+
+Scores map to ratings: Strong Buy (80+), Buy (65-79), Hold (40-64), Avoid (<40). Each rating is matched against the user's risk profile (conservative/moderate/aggressive) to determine suitability.
 
 ---
 
@@ -196,7 +223,7 @@ Receives the structured evidence and generates an explanation. The system prompt
 | Backend | FastAPI + SQLAlchemy 2.0 | REST API with ORM |
 | AI Runtime | Ollama (local) | Privacy-preserving LLM inference |
 | AI Models | Llama3 + Mistral | Analyst + Router |
-| Frontend | Next.js 14 + Tailwind CSS | Trading terminal UI |
+| Frontend | Next.js 14 + Tailwind CSS | Trading terminal UI (Black Gold theme) |
 | Charts | Lightweight Charts | Financial candlestick rendering |
 | Scheduler | APScheduler | Daily automated updates |
 | Data Sources | yfinance, FRED API | Free market data |
@@ -206,79 +233,47 @@ Receives the structured evidence and generates an explanation. The system prompt
 
 ## Database Design
 
-### TimescaleDB Hypertables
-
-The `stocks` and `crypto_prices` tables are TimescaleDB hypertables, partitioned into 365-day chunks. This means a query for "AAPL from 2020 to 2023" only scans 3-4 chunks instead of the entire 3.7M row table.
-
-```
-stocks (HYPERTABLE — 3.7M rows, 37 chunks)
-├── date (timestamptz) ── partition key
-├── company_id (FK → companies)
-├── open, high, low, close (numeric)
-├── volume (bigint)
-└── pct_change (numeric) ── precomputed daily return
-```
-
-### Precomputed Aggregation
-
-The `sector_performance` table stores precomputed daily sector averages (100K+ rows). This reduces heatmap API response from ~200ms (live aggregation across millions of rows) to ~5ms (single indexed lookup).
-
 ### Schema Overview
 
 | Table | Rows | Purpose |
 |---|---|---|
 | `stocks` | 3,638,974 | Daily OHLCV, hypertable |
+| `daily_indicators` | 3,538,980 | Precomputed MA, RSI, MACD, volatility |
 | `companies` | 503 | S&P 500 company metadata |
 | `crypto_prices` | 9,416 | BTC/ETH/SOL daily prices, hypertable |
 | `market_events` | 70,056 | Detected anomalies and crashes |
-| `macro_events` | 32,426 | Fed rate, CPI, GDP, VIX, etc. |
 | `sector_performance` | 100,276 | Precomputed heatmap data |
-| `sectors` | 11 | GICS sector definitions |
-| `crypto_assets` | 3 | Crypto asset definitions |
-| `market_regimes` | — | Extensible regime detection |
+| `macro_events` | 32,426 | Fed rate, CPI, GDP, VIX, etc. |
+| `company_cache` | dynamic | Cached fundamentals from yfinance |
+| `company_relationships` | 44 | Supplier/partner/competitor graph |
+| `portfolio_holdings` | user data | Portfolio positions with P&L |
+| `user_profiles` | user data | Risk tolerance, investment horizon |
+| `movement_cache` | cached | 6-hour TTL movement explanations |
 
 ---
 
 ## API Endpoints
 
-All endpoints support date range filtering. Swagger documentation at `http://localhost:8000/docs`.
-
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/stocks` | GET | List/search companies |
 | `/api/stocks/{ticker}` | GET | Price history with date range |
-| `/api/crypto` | GET | List crypto assets |
 | `/api/crypto/{symbol}` | GET | Crypto price history |
 | `/api/events` | GET | Market events with filters |
-| `/api/sectors` | GET | Sector list with counts |
 | `/api/sectors/{name}` | GET | Drill-down with per-company performance |
 | `/api/heatmap` | GET | Sector heatmap for any date |
-| `/api/heatmap/history` | GET | Sector performance over time |
 | `/api/movers/gainers` | GET | Top gainers (daily/weekly/monthly) |
 | `/api/movers/losers` | GET | Top losers (daily/weekly/monthly) |
-| `/api/movers/summary` | GET | Both in one call |
 | `/api/compare/stock` | GET | Compare stock across two periods |
 | `/api/compare/sector` | GET | Compare sectors across two periods |
-| `/api/compare/crypto` | GET | Compare crypto across two periods |
 | `/api/market/overview` | GET | Market summary (S&P, VIX, A/D) |
 | `/api/market/suggestions` | GET | Momentum-based stock picks |
 | `/api/ai/chat` | POST | AI analyst question answering |
-
-### Example: Compare AAPL in 2008 vs 2023
-
-```
-GET /api/compare/stock?ticker=AAPL&p1_start=2008-01-01&p1_end=2008-12-31&p2_start=2023-01-01&p2_end=2023-12-31
-```
-
-Response:
-```json
-{
-  "ticker": "AAPL",
-  "primary": {"total_return": -55.71, "volatility": 3.42},
-  "comparison": {"total_return": 54.80, "volatility": 1.19},
-  "diff": {"return_diff": -110.51, "direction": "comparison_better"}
-}
-```
+| `/api/company/{ticker}/intelligence` | GET | Full company profile + indicators |
+| `/api/company/{ticker}/movement-explanation` | GET | Movement attribution with scored drivers |
+| `/api/investments/score/{ticker}` | GET | Investment score (0-100) |
+| `/api/portfolio/holdings` | GET/POST/DELETE | Portfolio CRUD |
+| `/api/portfolio/analysis` | GET | Full portfolio intelligence |
+| `/api/investments/profile` | GET/POST | Risk profile management |
 
 ---
 
@@ -296,7 +291,7 @@ Response:
 
 ```bash
 # Clone
-git clone https://github.com/yourusername/market-intelligence-terminal.git
+git clone https://github.com/Siddhhhh/market-intelligence-terminal.git
 cd market-intelligence-terminal
 
 # Python environment
@@ -308,7 +303,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your database credentials
 
-# Database
+# Database setup
 psql -U postgres -c "CREATE USER market_user WITH PASSWORD 'market_pass_2024';"
 psql -U postgres -c "CREATE DATABASE market_intelligence OWNER market_user;"
 psql -U market_user -d market_intelligence -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
@@ -316,11 +311,20 @@ psql -U market_user -d market_intelligence -c "CREATE EXTENSION IF NOT EXISTS ti
 # Initialize schema
 python scripts/init_database.py
 
-# Load historical data (30-60 min for stocks, 5 min for crypto+macro)
+# Load historical data (30-60 min for stocks)
 python scripts/seed_database.py
 
 # Precompute sector performance (5-10 min)
 python -c "from backend.data_pipeline.sector_engine import compute_sector_performance; compute_sector_performance()"
+
+# Initialize intelligence system
+python scripts/init_intelligence.py
+
+# Precompute technical indicators (15-30 min)
+python -c "from backend.analysis.indicator_pipeline import compute_indicators; compute_indicators()"
+
+# Initialize investment system
+python scripts/init_investments.py
 
 # Ollama models
 ollama pull llama3
@@ -335,58 +339,30 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` — the dashboard loads with real market data.
+Open `http://localhost:3000`
 
 ### Daily Updates
 
 ```bash
-# Manual update (2-5 min)
-python scripts/run_pipeline.py daily
-
-# Start scheduler daemon (runs at 4:30 PM ET automatically)
-python scripts/run_pipeline.py scheduler
+python scripts/run_pipeline.py daily      # Manual update (3-4 min)
+python scripts/run_pipeline.py scheduler  # Auto-update daemon (4:30 PM ET)
 ```
 
 ---
 
-## Example AI Queries
+## Screenshots
 
-**Market data question:**
-> "Why did NVIDIA rise in 2023?"
-
-Response references: NVDA +246.10% return, biggest single-day moves (May 25: +24.37%, Feb 23: +14.02%), Technology sector avg +0.53% daily, Fed rate at 5.33%, VIX at 12.45. Confidence: 80%.
-
-**Historical analysis:**
-> "What happened during the 2020 COVID crash?"
-
-Response references: 11/11 sectors negative on March 16 2020, Real Estate worst at -18.09%, 659 market-wide crash events detected in database.
-
-**Cross-period comparison:**
-> "Compare Apple in 2008 vs 2023"
-
-Response: 2008 return -55.71% vs 2023 return +54.80%. Return difference: -110.51%. Volatility dropped from 3.42 to 1.19.
-
-**Finance knowledge:**
-> "What is inflation?"
-
-Direct LLM response without database query. Classified as `finance_knowledge` by the router.
-
----
-
-## Performance
-
-| Metric | Value |
+| Dashboard | Crypto Markets |
 |---|---|
-| Total stock data | 3,638,974 rows |
-| Historical range | 1990 → present (36 years) |
-| Companies tracked | 503 (S&P 500) |
-| Market events detected | 70,056 |
-| Heatmap API response | ~5ms (precomputed) |
-| Daily update time | 3-4 minutes |
-| Full historical load | 30-60 minutes (one-time) |
-| AI response time | 30-60 seconds (local LLM) |
+| ![Dashboard](docs/dashboard.png) | ![Crypto](docs/crypto.png) |
 
-TimescaleDB hypertables with 365-day chunk intervals allow range queries across decades to complete in milliseconds. Precomputed sector performance eliminates runtime aggregation across 3.7M rows.
+| Company Intelligence | Movement Attribution |
+|---|---|
+| ![Intelligence](docs/intelligence.png) | ![Movement](docs/movement.png) |
+
+| Portfolio Tracker | Investment Score |
+|---|---|
+| ![Portfolio](docs/portfolio.png) | ![Score](docs/score.png) |
 
 ---
 
@@ -395,56 +371,73 @@ TimescaleDB hypertables with 365-day chunk intervals allow range queries across 
 ```
 market-intelligence-terminal/
 ├── backend/
-│   ├── ai_engine/          # LLM integration
-│   │   ├── analyst.py      # Llama3 market analyst
-│   │   ├── router.py       # Mistral query router
-│   │   └── prompts.py      # System prompts
-│   ├── analysis/           # Intelligence modules
-│   │   ├── comparison_engine.py   # Cross-period comparison
-│   │   └── evidence_builder.py    # Structured evidence for AI
-│   ├── api/                # FastAPI REST endpoints
-│   │   ├── main.py         # App entry point
-│   │   ├── dependencies.py # DB session injection
-│   │   └── routes/         # 9 route modules
-│   └── data_pipeline/      # Data ingestion
-│       ├── stocks.py       # S&P 500 via yfinance
-│       ├── crypto.py       # BTC/ETH/SOL via yfinance
-│       ├── macro.py        # FRED economic data
-│       ├── events.py       # Anomaly detection engine
-│       ├── sector_engine.py # Precomputed sector perf
-│       ├── daily_update.py # Incremental daily update
-│       └── scheduler.py    # APScheduler automation
+│   ├── ai_engine/              # LLM integration
+│   │   ├── analyst.py          # Llama3 market analyst
+│   │   ├── router.py           # Mistral query router
+│   │   └── prompts.py          # System prompts
+│   ├── analysis/               # Intelligence modules
+│   │   ├── signals/            # Signal extractors (5 modules)
+│   │   │   ├── price_signals.py
+│   │   │   ├── volume_signals.py
+│   │   │   ├── sector_signals.py
+│   │   │   ├── macro_signals.py
+│   │   │   └── event_signals.py
+│   │   ├── scoring/
+│   │   │   └── signal_scorer.py    # Scoring + driver selection
+│   │   ├── movement_engine.py      # Attribution pipeline
+│   │   ├── presentation_mapper.py  # Analyst-style language
+│   │   ├── indicator_pipeline.py   # Precompute MA/RSI/MACD
+│   │   ├── investment_scorer.py    # 0-100 stock scoring
+│   │   ├── portfolio_engine.py     # Portfolio intelligence
+│   │   ├── comparison_engine.py    # Cross-period comparison
+│   │   └── evidence_builder.py     # Structured evidence for AI
+│   ├── api/                    # FastAPI REST endpoints
+│   │   ├── main.py             # App entry point
+│   │   └── routes/             # 11 route modules
+│   ├── data_pipeline/          # Data ingestion
+│   │   ├── stocks.py           # S&P 500 via yfinance
+│   │   ├── crypto.py           # BTC/ETH/SOL
+│   │   ├── macro.py            # FRED economic data
+│   │   ├── events.py           # Anomaly detection
+│   │   ├── sector_engine.py    # Precomputed sector perf
+│   │   ├── daily_update.py     # Incremental daily update
+│   │   └── scheduler.py        # APScheduler automation
+│   └── external_data/
+│       └── company_data.py     # yfinance provider wrapper
 ├── config/
-│   └── settings.py         # Pydantic-settings config
+│   └── settings.py             # Pydantic-settings config
 ├── database/
-│   ├── models.py           # 9 SQLAlchemy table models
-│   └── session.py          # Engine + session factory
-├── frontend/               # Next.js 14 dashboard
-│   ├── app/                # Pages (dashboard, crypto)
-│   └── components/         # 8 React components
-├── scripts/                # CLI tools + validation
-│   ├── init_database.py    # Schema + seed data
-│   ├── seed_database.py    # Full historical load
-│   ├── run_pipeline.py     # Pipeline runner
-│   └── validate_*.py       # Phase validation tests
-├── .env.example            # Required env variables
-├── requirements.txt        # Python dependencies
+│   ├── models.py               # 13 SQLAlchemy table models
+│   └── session.py              # Engine + session factory
+├── frontend/                   # Next.js 14 dashboard
+│   ├── app/                    # 4 pages
+│   │   ├── page.tsx            # Main dashboard
+│   │   ├── crypto/page.tsx     # Crypto markets
+│   │   ├── company/page.tsx    # Company Intelligence Terminal
+│   │   └── investments/page.tsx # Portfolio + Investment Scorer
+│   └── components/             # 10 React components
+├── scripts/                    # CLI tools + validation
+├── .env.example
+├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Screenshots
+## Performance
 
-| Dashboard | Crypto Page |
+| Metric | Value |
 |---|---|
-| ![Dashboard](docs/dashboard.png) | ![Crypto](docs/crypto.png) |
-
-| AI Chat | Sector Heatmap |
-|---|---|
-| ![AI Chat](docs/ai-chat.png) | ![Heatmap](docs/heatmap.png) |
-
-*Replace placeholder images with actual screenshots of your running dashboard.*
+| Stock data | 3,638,974 rows |
+| Technical indicators | 3,538,980 precomputed rows |
+| Historical range | 1990 → present (36 years) |
+| Companies tracked | 503 (S&P 500) |
+| Market events detected | 70,056 |
+| Heatmap API response | ~5ms (precomputed) |
+| Movement explanation | <300ms (with cache) |
+| Investment score | <200ms |
+| Daily update time | 3-4 minutes |
+| AI response time | 30-60 seconds (local LLM) |
 
 ---
 
@@ -452,13 +445,13 @@ market-intelligence-terminal/
 
 - **Real-time streaming** — WebSocket price feeds for live updates
 - **Advanced forecasting** — LSTM/transformer models for price prediction
-- **Portfolio tracking** — personal watchlists with P&L tracking
+- **Monte Carlo simulation** — portfolio risk modeling
 - **Global markets** — extend beyond S&P 500 to international exchanges
 - **Options data** — implied volatility surfaces and Greeks
-- **Sentiment analysis** — financial news NLP via Finnhub integration
+- **Sentiment analysis** — financial news NLP integration
 - **Market regime detection** — automated bull/bear classification (schema ready)
-- **Relationship graph** — NetworkX correlation graph between companies (schema ready)
-- **Scenario simulation** — "What if rates rise 1%?" historical pattern matching
+- **Financial timeline** — visual event timeline overlaid on charts
+- **Multi-user auth** — NextAuth integration for real user accounts
 
 ---
 
@@ -468,4 +461,4 @@ MIT
 
 ---
 
-*Built as a portfolio project demonstrating AI engineering, data engineering, and full-stack development.*
+*Built as a portfolio project demonstrating AI engineering, data engineering, quantitative analysis, and full-stack development.*
