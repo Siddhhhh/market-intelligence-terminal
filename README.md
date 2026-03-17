@@ -4,9 +4,10 @@ A production-grade financial intelligence platform that combines 35+ years of ma
 
 This is not a tutorial project. It ingests 3.7 million rows of real stock data, detects market anomalies automatically, and answers financial questions using a two-model AI architecture grounded in database evidence.
 
-![Demo](docs/demo.gif)
 
 ![Dashboard Preview](docs/dashboard.png)
+
+![Demo](docs/demo.gif)
 ---
 
 ## What It Does
