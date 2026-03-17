@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes import stocks, crypto, events, sectors, movers, heatmap, chat, market, compare
+from backend.api.routes import stocks, crypto, events, sectors, movers, heatmap, chat, market, compare, company, investments, compare
 
 app = FastAPI(
     title="Market Intelligence Terminal",
@@ -52,6 +52,8 @@ app.include_router(heatmap.router)
 app.include_router(chat.router)
 app.include_router(market.router)
 app.include_router(compare.router)
+app.include_router(company.router)
+app.include_router(investments.router)
 
 
 @app.get("/", tags=["Health"])

@@ -34,6 +34,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             >
               Crypto
             </Link>
+            <Link
+              href="/company?ticker=AAPL"
+              className="px-3 py-1.5 text-[11px] font-semibold text-terminal-dim hover:text-terminal-text hover:bg-terminal-surface rounded transition-colors uppercase tracking-widest"
+            >
+              Intelligence
+            </Link>
+            <Link
+              href="/investments"
+              className="px-3 py-1.5 text-[11px] font-semibold text-terminal-dim hover:text-terminal-text hover:bg-terminal-surface rounded transition-colors uppercase tracking-widest"
+            >
+              Portfolio
+            </Link>
           </nav>
 
           <div className="ml-auto flex items-center gap-4">

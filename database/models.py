@@ -390,3 +390,181 @@ class SectorPerformance(Base):
 
     def __repr__(self) -> str:
         return f"<SectorPerformance(date='{self.date}', sector_id={self.sector_id}, avg={self.avg_pct_change})>"
+
+
+# ── Daily Indicators (Precomputed) ─────────────────────────
+
+class DailyIndicator(Base):
+    """
+    Precomputed technical indicators for each company per trading day.
+
+    Computed offline by the indicator pipeline — NEVER at request time.
+    Used by the Movement Attribution Engine for signal extraction.
+    """
+    __tablename__ = "daily_indicators"
+
+    date = Column(Date, primary_key=True, nullable=False)
+    company_id = Column(
+        Integer,
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    ma20 = Column(Numeric(12, 4), nullable=True, comment="20-day simple moving average")
+    ma50 = Column(Numeric(12, 4), nullable=True, comment="50-day simple moving average")
+    ma200 = Column(Numeric(12, 4), nullable=True, comment="200-day simple moving average")
+    rsi = Column(Numeric(8, 4), nullable=True, comment="14-day RSI (0-100)")
+    macd = Column(Numeric(10, 4), nullable=True, comment="MACD line (12,26)")
+    macd_signal = Column(Numeric(10, 4), nullable=True, comment="MACD signal line (9)")
+    macd_histogram = Column(Numeric(10, 4), nullable=True, comment="MACD histogram")
+    volatility_20d = Column(Numeric(8, 4), nullable=True, comment="20-day rolling stddev of returns")
+    volume_ratio = Column(Numeric(8, 4), nullable=True, comment="Today volume / 20-day avg volume")
+    trend_direction = Column(String(20), nullable=True, comment="bullish / bearish / neutral")
+    computed_at = Column(DateTime, server_default=text("NOW()"), nullable=False)
+
+    __table_args__ = (
+        Index("idx_daily_ind_company_date", "company_id", "date"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DailyIndicator(company_id={self.company_id}, date='{self.date}', rsi={self.rsi})>"
+
+
+# ── Company Cache (Provider-backed) ────────────────────────
+
+class CompanyCache(Base):
+    """
+    Cached company fundamentals from yfinance.
+
+    Refreshed daily by the company data provider.
+    Wraps yfinance so core logic never calls it directly.
+    """
+    __tablename__ = "company_cache"
+
+    ticker = Column(String(20), primary_key=True, nullable=False)
+    market_cap = Column(BigInteger, nullable=True)
+    pe_ratio = Column(Numeric(10, 4), nullable=True)
+    forward_pe = Column(Numeric(10, 4), nullable=True)
+    revenue = Column(BigInteger, nullable=True)
+    net_income = Column(BigInteger, nullable=True)
+    profit_margin = Column(Numeric(8, 4), nullable=True)
+    eps = Column(Numeric(10, 4), nullable=True)
+    revenue_growth = Column(Numeric(8, 4), nullable=True)
+    fifty_two_week_high = Column(Numeric(12, 4), nullable=True)
+    fifty_two_week_low = Column(Numeric(12, 4), nullable=True)
+    avg_volume = Column(BigInteger, nullable=True)
+    top_holders = Column(JSON, nullable=True, comment="Array of {name, shares, pct}")
+    updated_at = Column(DateTime, server_default=text("NOW()"), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<CompanyCache(ticker='{self.ticker}', pe={self.pe_ratio})>"
+
+
+# ── Company Relationships (Graph Model) ────────────────────
+
+class CompanyRelationship(Base):
+    """
+    Curated relationships between companies.
+    Supplier, partner, competitor links.
+
+    Labeled as estimated where data is approximated.
+    """
+    __tablename__ = "company_relationships"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    related_company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    relationship_type = Column(String(30), nullable=False, comment="supplier, partner, competitor")
+    confidence_score = Column(Numeric(5, 4), nullable=False, comment="0.0 to 1.0")
+    description = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_company_rel_company", "company_id"),
+        Index("idx_company_rel_related", "related_company_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CompanyRelationship(company={self.company_id}, related={self.related_company_id}, type='{self.relationship_type}')>"
+
+
+# ── Movement Cache ─────────────────────────────────────────
+
+class MovementCache(Base):
+    """
+    Cached movement explanation results.
+
+    TTL: 6-12 hours. Avoids re-running the attribution engine
+    for the same ticker+range within the cache window.
+    """
+    __tablename__ = "movement_cache"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ticker = Column(String(20), nullable=False, index=True)
+    range_period = Column(String(10), nullable=False, comment="1d, 7d, 30d")
+    result_json = Column(JSON, nullable=False)
+    generated_at = Column(DateTime, server_default=text("NOW()"), nullable=False)
+
+    __table_args__ = (
+        Index("idx_movement_cache_ticker_range", "ticker", "range_period"),
+    )
+
+
+# ── User Profiles ──────────────────────────────────────────
+
+class UserProfile(Base):
+    """
+    User financial profile for investment intelligence.
+
+    Temporary: uses demo_user_1 as default before auth integration.
+    Stores risk tolerance and investment horizon for personalized scoring.
+    """
+    __tablename__ = "user_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(50), unique=True, nullable=False, index=True, comment="demo_user_1 default")
+    name = Column(String(100), nullable=False, default="Default User")
+    risk_tolerance = Column(
+        String(20), nullable=False, default="moderate",
+        comment="conservative, moderate, aggressive",
+    )
+    investment_horizon = Column(
+        String(20), nullable=False, default="medium",
+        comment="short (< 1yr), medium (1-5yr), long (5yr+)",
+    )
+    created_at = Column(DateTime, server_default=text("NOW()"), nullable=False)
+    updated_at = Column(DateTime, server_default=text("NOW()"), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<UserProfile(user_id='{self.user_id}', risk='{self.risk_tolerance}')>"
+
+
+# ── Portfolio Holdings ─────────────────────────────────────
+
+class PortfolioHolding(Base):
+    """
+    Individual portfolio position.
+
+    Tracks buy price for P&L calculation. Current value computed
+    at query time from the stocks table.
+
+    Supports both stocks and crypto via asset_type field.
+    """
+    __tablename__ = "portfolio_holdings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(50), nullable=False, index=True, comment="FK to user_profiles.user_id")
+    asset_type = Column(String(10), nullable=False, default="stock", comment="stock or crypto")
+    ticker = Column(String(20), nullable=False)
+    quantity = Column(Numeric(12, 4), nullable=False)
+    avg_buy_price = Column(Numeric(12, 4), nullable=False)
+    buy_date = Column(Date, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=text("NOW()"), nullable=False)
+    updated_at = Column(DateTime, server_default=text("NOW()"), nullable=False)
+
+    __table_args__ = (
+        Index("idx_portfolio_user_ticker", "user_id", "ticker"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PortfolioHolding(user='{self.user_id}', ticker='{self.ticker}', qty={self.quantity})>"

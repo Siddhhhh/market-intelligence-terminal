@@ -17,6 +17,12 @@ from database.models import (
     MacroEvent,
     MarketRegime,
     SectorPerformance,
+    DailyIndicator,
+    CompanyCache,
+    CompanyRelationship,
+    MovementCache,
+    UserProfile,
+    PortfolioHolding,
 )
 from database.session import engine, get_session, SessionLocal
 
@@ -31,6 +37,10 @@ __all__ = [
     "MacroEvent",
     "MarketRegime",
     "SectorPerformance",
+    "DailyIndicator",
+    "CompanyCache",
+    "CompanyRelationship",
+    "MovementCache",
     "engine",
     "get_session",
     "SessionLocal",
