@@ -471,3 +471,5 @@ MIT
 ---
 
 *Built as a portfolio project demonstrating AI engineering, data engineering, and full-stack development.*
+
+Built by [Siddhaarth Chandran](https://github.com/Siddhhhh)
